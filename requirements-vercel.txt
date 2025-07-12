@@ -1,0 +1,10 @@
+flask
+openai
+pandas
+numpy
+matplotlib
+seaborn
+beautifulsoup4
+requests
+duckdb
+trafilatura
