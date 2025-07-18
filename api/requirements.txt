@@ -1,9 +1,0 @@
-fastapi
-python-multipart
-openai
-requests
-pandas
-numpy
-matplotlib
-beautifulsoup4
-scipy
