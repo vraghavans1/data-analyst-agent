@@ -1,7 +1,6 @@
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
-import trafilatura
 import logging
 import re
 from typing import Optional, List, Dict, Any
@@ -18,14 +17,27 @@ class WebScraper:
         })
     
     def get_website_text_content(self, url: str) -> str:
-        """
-        Extract main text content from a website using trafilatura.
-        The text content is extracted using trafilatura and easier to understand.
-        """
+        """Extract main text content from a website using BeautifulSoup."""
         try:
-            downloaded = trafilatura.fetch_url(url)
-            text = trafilatura.extract(downloaded)
-            return text or ""
+            response = self.session.get(url)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Get text content
+            text = soup.get_text()
+            
+            # Clean up text
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = '\n'.join(chunk for chunk in chunks if chunk)
+            
+            return text
+            
         except Exception as e:
             self.logger.error(f"Error extracting text from {url}: {str(e)}")
             return ""
@@ -135,7 +147,7 @@ class WebScraper:
                 numeric_col = df[col].astype(str).str.replace(',', '').str.replace('$', '').str.replace('%', '')
                 numeric_col = numeric_col.str.replace(r'[^\d.-]', '', regex=True)  # Remove non-numeric characters
                 numeric_col = pd.to_numeric(numeric_col, errors='coerce')  # Use coerce to handle invalid values
-                if numeric_col.notna().any():  # If any values were successfully converted
+                if numeric_col.notna().sum() > 0:  # If any values were successfully converted
                     df[col] = numeric_col
         
         # Convert date columns

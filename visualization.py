@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
-import seaborn as sns
 import pandas as pd
 import numpy as np
 import io
@@ -16,10 +15,9 @@ class DataVisualizer:
         self.logger = logging.getLogger(__name__)
         # Set style
         plt.style.use('default')
-        sns.set_palette("husl")
         
     def create_scatterplot(self, data: pd.DataFrame, x_col: str, y_col: str, 
-                          config: Dict[str, Any] = None) -> str:
+                          config: Optional[Dict[str, Any]] = None) -> str:
         """Create a scatterplot with optional regression line."""
         try:
             config = config or {}
@@ -147,9 +145,23 @@ class DataVisualizer:
             
             fig, ax = plt.subplots(figsize=(10, 8))
             
-            # Create heatmap
-            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
-                       square=True, fmt='.2f', ax=ax)
+            # Create heatmap manually without seaborn
+            im = ax.imshow(corr_matrix, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
+            
+            # Set ticks and labels
+            ax.set_xticks(range(len(corr_matrix.columns)))
+            ax.set_yticks(range(len(corr_matrix.columns)))
+            ax.set_xticklabels(corr_matrix.columns, rotation=45, ha='right')
+            ax.set_yticklabels(corr_matrix.columns)
+            
+            # Add colorbar
+            plt.colorbar(im, ax=ax)
+            
+            # Add text annotations
+            for i in range(len(corr_matrix.columns)):
+                for j in range(len(corr_matrix.columns)):
+                    text = ax.text(j, i, f'{corr_matrix.iloc[i, j]:.2f}',
+                                 ha="center", va="center", color="black" if abs(corr_matrix.iloc[i, j]) < 0.5 else "white")
             
             ax.set_title('Correlation Heatmap')
             plt.tight_layout()

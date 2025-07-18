@@ -30,7 +30,7 @@ The plan should identify:
 3. Output format expected (array, json_object, etc.)
 
 For data sources, identify:
-- Type: web_scraping, duckdb_query, csv_url
+- Type: web_scraping, csv_url
 - URL or query details (must be explicitly mentioned in query)
 - Table/data structure information
 
@@ -99,17 +99,6 @@ Response format:
                 'url': url,
                 'table_selector': 'table.wikitable'
             }
-        
-        # Check for DuckDB/S3 queries
-        if 's3://' in original_query or 'read_parquet' in original_query:
-            # Extract the SQL query from the original query
-            sql_match = re.search(r'```sql\n(.*?)```', original_query, re.DOTALL)
-            if sql_match:
-                sql_query = sql_match.group(1).strip()
-                plan['data_source'] = {
-                    'type': 'duckdb_query',
-                    'query': sql_query
-                }
         
         # Check for specific output format requirements
         if 'JSON array' in original_query:

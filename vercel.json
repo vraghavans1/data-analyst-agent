@@ -1,4 +1,26 @@
 {
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "250mb",
+        "excludeFiles": [
+          "*.pyc",
+          "__pycache__/**",
+          ".cache/**",
+          ".pythonlibs/**",
+          "attached_assets/**"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.py"
+    }
+  ],
   "functions": {
     "api/index.py": {
       "maxDuration": 180

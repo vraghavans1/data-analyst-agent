@@ -10,7 +10,6 @@ from web_scraper import WebScraper
 from visualization import DataVisualizer
 import pandas as pd
 import numpy as np
-import duckdb
 from io import StringIO
 import traceback
 
@@ -95,9 +94,11 @@ class DataAnalystAgent:
                     # Handle simple questions using OpenAI
                     results.update(self._handle_simple_calculation(step))
                 elif step['type'] == 'statistical_analysis':
-                    results.update(self._perform_statistical_analysis(data, step))
+                    if data is not None:
+                        results.update(self._perform_statistical_analysis(data, step))
                 elif step['type'] == 'visualization':
-                    results.update(self._create_visualization(data, step))
+                    if data is not None:
+                        results.update(self._create_visualization(data, step))
                 elif step['type'] == 'query_execution':
                     # Handle count operations directly
                     if step.get('analysis_type') == 'count' and data is not None:
@@ -110,7 +111,8 @@ class DataAnalystAgent:
                         if data is not None:
                             results['count'] = len(data)
                     else:
-                        data = self._transform_data(data, step)
+                        if data is not None:
+                            data = self._transform_data(data, step)
         
         # Step 3: Format results based on expected output format
         self.logger.info(f"Raw results before formatting: {results}")
@@ -131,11 +133,6 @@ class DataAnalystAgent:
                 else:
                     return self.web_scraper.scrape_table_data(url)
         
-        elif source_type == 'duckdb_query':
-            query = data_source.get('query')
-            if query:
-                return self._execute_duckdb_query(query)
-        
         elif source_type == 'csv_url':
             url = data_source.get('url')
             if url:
@@ -143,52 +140,35 @@ class DataAnalystAgent:
         
         return None
     
-    def _execute_duckdb_query(self, query: str) -> pd.DataFrame:
-        """Execute DuckDB query and return results as DataFrame."""
-        try:
-            conn = duckdb.connect()
-            
-            # Install required extensions
-            conn.execute("INSTALL httpfs; LOAD httpfs;")
-            conn.execute("INSTALL parquet; LOAD parquet;")
-            
-            # Execute query
-            result = conn.execute(query).fetchdf()
-            conn.close()
-            
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"Error executing DuckDB query: {str(e)}")
-            raise
-    
     def _perform_statistical_analysis(self, data: pd.DataFrame, step: Dict) -> Dict:
         """Perform statistical analysis on the data."""
         results = {}
         
-        if not data is None and not data.empty:
+        if not data.empty:
             analysis_type = step.get('analysis_type')
             
             if analysis_type == 'correlation':
-                col1, col2 = step.get('columns', [])
-                if col1 in data.columns and col2 in data.columns:
-                    try:
-                        # Ensure columns are numeric
-                        numeric_col1 = pd.to_numeric(data[col1], errors='coerce')
-                        numeric_col2 = pd.to_numeric(data[col2], errors='coerce')
-                        
-                        # Drop rows with NaN values for correlation calculation
-                        clean_data = pd.DataFrame({col1: numeric_col1, col2: numeric_col2}).dropna()
-                        
-                        if len(clean_data) > 1:
-                            corr = clean_data[col1].corr(clean_data[col2])
-                            results['correlation'] = corr
-                        else:
-                            results['correlation'] = 0.0
+                columns = step.get('columns', [])
+                if len(columns) >= 2:
+                    col1, col2 = columns[0], columns[1]
+                    if col1 in data.columns and col2 in data.columns:
+                        try:
+                            # Ensure columns are numeric
+                            numeric_col1 = pd.to_numeric(data[col1], errors='coerce')
+                            numeric_col2 = pd.to_numeric(data[col2], errors='coerce')
                             
-                    except Exception as e:
-                        self.logger.error(f"Error calculating correlation: {str(e)}")
-                        results['correlation'] = 0.0
+                            # Drop rows with NaN values for correlation calculation
+                            clean_data = pd.DataFrame({col1: numeric_col1, col2: numeric_col2}).dropna()
+                            
+                            if len(clean_data) > 1:
+                                corr = clean_data[col1].corr(clean_data[col2])
+                                results['correlation'] = corr
+                            else:
+                                results['correlation'] = 0.0
+                                
+                        except Exception as e:
+                            self.logger.error(f"Error calculating correlation: {str(e)}")
+                            results['correlation'] = 0.0
             
             elif analysis_type == 'count':
                 condition = step.get('condition')
@@ -196,19 +176,20 @@ class DataAnalystAgent:
                     # Use LLM to evaluate complex conditions
                     count = self._evaluate_condition(data, condition)
                     results['count'] = count
-            
-            elif analysis_type == 'filter':
-                condition = step.get('condition')
-                if condition:
-                    filtered_data = self._filter_data(data, condition)
-                    results['filtered_data'] = filtered_data
+                else:
+                    results['count'] = len(data)
             
             elif analysis_type == 'regression':
-                x_col, y_col = step.get('columns', [])
-                if x_col in data.columns and y_col in data.columns:
-                    slope, intercept = np.polyfit(data[x_col], data[y_col], 1)
-                    results['regression_slope'] = slope
-                    results['regression_intercept'] = intercept
+                columns = step.get('columns', [])
+                if len(columns) >= 2:
+                    x_col, y_col = columns[0], columns[1]
+                    if x_col in data.columns and y_col in data.columns:
+                        try:
+                            slope, intercept = np.polyfit(data[x_col], data[y_col], 1)
+                            results['regression_slope'] = slope
+                            results['regression_intercept'] = intercept
+                        except Exception as e:
+                            self.logger.error(f"Error calculating regression: {str(e)}")
         
         return results
     
@@ -216,41 +197,39 @@ class DataAnalystAgent:
         """Create visualizations based on the step configuration."""
         results = {}
         
-        if not data is None and not data.empty:
+        if not data.empty:
             viz_type = step.get('viz_type')
             
             if viz_type == 'scatterplot':
-                x_col, y_col = step.get('columns', [])
-                if x_col in data.columns and y_col in data.columns:
-                    plot_config = step.get('plot_config', {})
-                    base64_image = self.visualizer.create_scatterplot(
-                        data, x_col, y_col, plot_config
-                    )
-                    results['plot'] = base64_image
+                columns = step.get('columns', [])
+                if len(columns) >= 2:
+                    x_col, y_col = columns[0], columns[1]
+                    if x_col in data.columns and y_col in data.columns:
+                        plot_config = step.get('plot_config', {})
+                        base64_image = self.visualizer.create_scatterplot(
+                            data, x_col, y_col, plot_config
+                        )
+                        results['plot'] = base64_image
             
             elif viz_type == 'histogram':
-                col = step.get('column')
-                if col in data.columns:
-                    base64_image = self.visualizer.create_histogram(data, col)
+                column = step.get('column')
+                if column and column in data.columns:
+                    base64_image = self.visualizer.create_histogram(data, column)
                     results['histogram'] = base64_image
             
             elif viz_type == 'line_plot':
-                x_col, y_col = step.get('columns', [])
-                if x_col in data.columns and y_col in data.columns:
-                    base64_image = self.visualizer.create_line_plot(data, x_col, y_col)
-                    results['line_plot'] = base64_image
+                columns = step.get('columns', [])
+                if len(columns) >= 2:
+                    x_col, y_col = columns[0], columns[1]
+                    if x_col in data.columns and y_col in data.columns:
+                        base64_image = self.visualizer.create_line_plot(data, x_col, y_col)
+                        results['line_plot'] = base64_image
         
         return results
     
     def _execute_query(self, step: Dict) -> Dict:
         """Execute database queries."""
         results = {}
-        
-        if step.get('query_type') == 'duckdb':
-            query = step.get('query')
-            if query:
-                df = self._execute_duckdb_query(query)
-                results['query_result'] = df
         
         # Handle count analysis type in query execution
         if step.get('analysis_type') == 'count':
@@ -268,7 +247,8 @@ class DataAnalystAgent:
         
         if transform_type == 'filter':
             condition = step.get('condition')
-            return self._filter_data(data, condition)
+            if condition:
+                return self._filter_data(data, condition)
         
         elif transform_type == 'aggregate':
             group_by = step.get('group_by')
@@ -288,30 +268,33 @@ class DataAnalystAgent:
         """Filter data based on natural language condition."""
         try:
             # Use LLM to convert natural language condition to pandas query
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Convert the natural language condition to a pandas query expression. "
-                                 f"Available columns: {list(data.columns)}. "
-                                 "Return only the query expression, no explanation. "
-                                 "Use pandas query syntax."
-                    },
-                    {"role": "user", "content": condition}
-                ],
-                max_tokens=100
-            )
-            
-            query_expr = response.choices[0].message.content.strip()
-            return data.query(query_expr)
+            if self.openai_client:
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Convert the natural language condition to a pandas query expression. "
+                                     f"Available columns: {list(data.columns)}. "
+                                     "Return only the query expression, no explanation. "
+                                     "Use pandas query syntax."
+                        },
+                        {"role": "user", "content": condition}
+                    ]
+                )
+                
+                query_expression = response.choices[0].message.content.strip()
+                filtered_data = data.query(query_expression)
+                return filtered_data
+            else:
+                return data
             
         except Exception as e:
             self.logger.error(f"Error filtering data: {str(e)}")
             return data
     
     def _evaluate_condition(self, data: pd.DataFrame, condition: str) -> int:
-        """Evaluate a condition and return count."""
+        """Evaluate a condition on the data and return count."""
         try:
             filtered_data = self._filter_data(data, condition)
             return len(filtered_data)
@@ -319,75 +302,67 @@ class DataAnalystAgent:
             self.logger.error(f"Error evaluating condition: {str(e)}")
             return 0
     
-    def _format_results(self, results: Dict, output_format: str) -> Any:
-        """Format results based on expected output format."""
-        if output_format == 'array':
-            # Return as array for specific test cases
-            formatted_results = []
-            for key, value in results.items():
-                if isinstance(value, (int, float, str)):
-                    formatted_results.append(value)
-                elif isinstance(value, pd.DataFrame):
-                    # For DataFrames, return row count or specific data
-                    formatted_results.append(len(value))
-                else:
-                    formatted_results.append(value)
-            return formatted_results
-        
-        elif output_format == 'json_object':
-            # Return as JSON object
-            formatted_results = {}
-            for key, value in results.items():
-                if isinstance(value, pd.DataFrame):
-                    formatted_results[key] = len(value)  # Return count for DataFrames
-                else:
-                    formatted_results[key] = value
-            return formatted_results
-        
-        else:
-            # Default JSON format - ensure all values are JSON serializable
-            formatted_results = {}
-            for key, value in results.items():
-                if isinstance(value, pd.DataFrame):
-                    formatted_results[key] = len(value)
-                elif isinstance(value, (int, float, str, bool, type(None))):
-                    formatted_results[key] = value
-                else:
-                    formatted_results[key] = str(value)
-            return formatted_results
-    
     def _handle_simple_calculation(self, step: Dict) -> Dict:
-        """Handle simple calculations and general questions using OpenAI."""
+        """Handle simple calculations using OpenAI."""
         try:
             question = step.get('question', '')
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that answers questions directly and concisely. "
-                                 "For mathematical calculations, provide the exact answer. "
-                                 "For general questions, provide a clear, informative response."
-                    },
-                    {"role": "user", "content": question}
-                ],
-                max_tokens=500
-            )
-            
-            answer = response.choices[0].message.content.strip()
-            
-            return {
-                'answer': answer,
-                'question': question,
-                'type': 'simple_calculation'
-            }
+            if self.openai_client:
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a helpful assistant that answers questions directly and concisely. "
+                                     "For mathematical calculations, provide the numerical result. "
+                                     "For factual questions, provide accurate information."
+                        },
+                        {"role": "user", "content": question}
+                    ]
+                )
+                
+                answer = response.choices[0].message.content.strip()
+                
+                # Try to extract numeric result if it's a calculation
+                try:
+                    # Check if the answer contains a number
+                    import re
+                    numbers = re.findall(r'-?\d+\.?\d*', answer)
+                    if numbers:
+                        numeric_result = float(numbers[0])
+                        return {'result': numeric_result, 'answer': answer}
+                except:
+                    pass
+                
+                return {'answer': answer}
+            else:
+                return {'error': 'OpenAI client not available'}
             
         except Exception as e:
             self.logger.error(f"Error handling simple calculation: {str(e)}")
+            return {'error': str(e)}
+    
+    def _format_results(self, results: Dict, output_format: str) -> Any:
+        """Format results based on the expected output format."""
+        if output_format == 'array':
+            # Return as array for IIT Madras format
+            values = []
+            for key, value in results.items():
+                if isinstance(value, (int, float, str)):
+                    values.append(value)
+                elif isinstance(value, dict) and 'result' in value:
+                    values.append(value['result'])
+                elif isinstance(value, dict) and 'answer' in value:
+                    values.append(value['answer'])
+            return values
+        
+        elif output_format == 'json_object':
+            return results
+        
+        else:
+            # Default format with message and analysis
             return {
-                'answer': 'I apologize, but I encountered an error processing your question.',
-                'question': question,
-                'type': 'simple_calculation',
-                'error': str(e)
+                'results': list(results.values()),
+                'message': 'Analysis completed successfully',
+                'analysis': f'Processed {len(results)} analysis steps'
             }
