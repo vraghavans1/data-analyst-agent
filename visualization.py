@@ -1,227 +1,344 @@
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import pandas as pd
-import numpy as np
-import io
+"""
+Lightweight visualization module for Vercel deployment
+Creates simple charts without matplotlib using SVG and HTML
+"""
+
+import json
 import base64
-from typing import Dict, Any, Optional
-import logging
+import io
+from typing import Dict, Any, List, Optional, Tuple
+import math
 
 class DataVisualizer:
-    """Handles data visualization and chart generation."""
+    """
+    Lightweight data visualizer that creates charts using SVG.
+    Optimized for Vercel deployment without matplotlib dependency.
+    """
     
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
-        # Set style
-        plt.style.use('default')
+        self.width = 800
+        self.height = 600
+        self.margin = 50
+        self.colors = [
+            '#2563eb', '#dc2626', '#16a34a', '#ca8a04', '#9333ea',
+            '#c2410c', '#0891b2', '#be123c', '#4338ca', '#059669'
+        ]
+    
+    def create_chart(self, data: Dict[str, Any], chart_type: str = 'bar') -> str:
+        """
+        Create a chart from data.
         
-    def create_scatterplot(self, data: pd.DataFrame, x_col: str, y_col: str, 
-                          config: Optional[Dict[str, Any]] = None) -> str:
-        """Create a scatterplot with optional regression line."""
+        Args:
+            data: Dictionary containing chart data
+            chart_type: Type of chart ('bar', 'line', 'pie', 'scatter')
+            
+        Returns:
+            Base64 encoded SVG chart
+        """
         try:
-            config = config or {}
+            if chart_type == 'bar':
+                svg = self._create_bar_chart(data)
+            elif chart_type == 'line':
+                svg = self._create_line_chart(data)
+            elif chart_type == 'pie':
+                svg = self._create_pie_chart(data)
+            elif chart_type == 'scatter':
+                svg = self._create_scatter_chart(data)
+            else:
+                svg = self._create_bar_chart(data)  # Default to bar chart
             
-            # Clean and convert data to numeric
-            x_data = pd.to_numeric(data[x_col], errors='coerce')
-            y_data = pd.to_numeric(data[y_col], errors='coerce')
-            
-            # Create clean dataframe and drop NaN values
-            clean_data = pd.DataFrame({x_col: x_data, y_col: y_data}).dropna()
-            
-            if len(clean_data) == 0:
-                return self._create_error_plot("No valid numeric data for plotting")
-            
-            # Create figure
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
-            # Create scatterplot
-            ax.scatter(clean_data[x_col], clean_data[y_col], alpha=0.6, s=50)
-            
-            # Add regression line if requested
-            if config.get('regression_line', False):
-                # Calculate regression line
-                z = np.polyfit(clean_data[x_col], clean_data[y_col], 1)
-                p = np.poly1d(z)
-                
-                # Plot regression line
-                x_range = np.linspace(clean_data[x_col].min(), clean_data[x_col].max(), 100)
-                y_pred = p(x_range)
-                
-                # Set line style and color
-                color = config.get('regression_color', 'red')
-                linestyle = '--' if config.get('regression_style') == 'dotted' else '-'
-                
-                ax.plot(x_range, y_pred, color=color, linestyle=linestyle, 
-                       linewidth=2, label=f'Regression Line')
-                ax.legend()
-            
-            # Set labels and title
-            ax.set_xlabel(x_col)
-            ax.set_ylabel(y_col)
-            ax.set_title(f'{y_col} vs {x_col}')
-            
-            # Add grid
-            ax.grid(True, alpha=0.3)
-            
-            # Convert to base64
-            return self._fig_to_base64(fig, 'png')
+            # Convert SVG to base64
+            svg_bytes = svg.encode('utf-8')
+            return base64.b64encode(svg_bytes).decode('utf-8')
             
         except Exception as e:
-            self.logger.error(f"Error creating scatterplot: {str(e)}")
-            return self._create_error_plot(f"Error creating scatterplot: {str(e)}")
+            return self._create_error_chart(f"Error creating chart: {str(e)}")
     
-    def create_histogram(self, data: pd.DataFrame, column: str, bins: int = 30) -> str:
-        """Create a histogram."""
-        try:
-            fig, ax = plt.subplots(figsize=(10, 6))
+    def _create_bar_chart(self, data: Dict[str, Any]) -> str:
+        """Create a bar chart using SVG."""
+        labels = data.get('labels', [])
+        values = data.get('values', [])
+        title = data.get('title', 'Bar Chart')
+        
+        if not labels or not values:
+            return self._create_error_chart("No data available for bar chart")
+        
+        # Calculate dimensions
+        chart_width = self.width - 2 * self.margin
+        chart_height = self.height - 2 * self.margin
+        
+        # Calculate scales
+        max_value = max(values) if values else 1
+        min_value = min(values) if values else 0
+        value_range = max_value - min_value if max_value != min_value else 1
+        
+        bar_width = chart_width / len(labels) * 0.8
+        bar_spacing = chart_width / len(labels)
+        
+        # Start SVG
+        svg = f'''<svg width="{self.width}" height="{self.height}" xmlns="http://www.w3.org/2000/svg">
+        <style>
+            .title {{ font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; text-anchor: middle; }}
+            .axis-label {{ font-family: Arial, sans-serif; font-size: 12px; text-anchor: middle; }}
+            .bar {{ stroke: #333; stroke-width: 1; }}
+            .grid {{ stroke: #ddd; stroke-width: 0.5; }}
+        </style>
+        
+        <!-- Background -->
+        <rect width="{self.width}" height="{self.height}" fill="white"/>
+        
+        <!-- Title -->
+        <text x="{self.width/2}" y="30" class="title">{title}</text>
+        
+        <!-- Grid lines -->'''
+        
+        # Add horizontal grid lines
+        for i in range(6):
+            y = self.margin + (chart_height * i / 5)
+            svg += f'<line x1="{self.margin}" y1="{y}" x2="{self.width - self.margin}" y2="{y}" class="grid"/>'
+        
+        # Add bars
+        for i, (label, value) in enumerate(zip(labels, values)):
+            x = self.margin + (i * bar_spacing) + (bar_spacing - bar_width) / 2
+            bar_height = (value - min_value) / value_range * chart_height
+            y = self.height - self.margin - bar_height
             
-            ax.hist(data[column], bins=bins, alpha=0.7, edgecolor='black')
-            ax.set_xlabel(column)
-            ax.set_ylabel('Frequency')
-            ax.set_title(f'Distribution of {column}')
-            ax.grid(True, alpha=0.3)
+            color = self.colors[i % len(self.colors)]
             
-            return self._fig_to_base64(fig, 'png')
-            
-        except Exception as e:
-            self.logger.error(f"Error creating histogram: {str(e)}")
-            return self._create_error_plot(f"Error creating histogram: {str(e)}")
+            svg += f'''
+            <rect x="{x}" y="{y}" width="{bar_width}" height="{bar_height}" 
+                  fill="{color}" class="bar"/>
+            <text x="{x + bar_width/2}" y="{self.height - self.margin + 15}" 
+                  class="axis-label">{label}</text>
+            <text x="{x + bar_width/2}" y="{y - 5}" 
+                  class="axis-label">{value}</text>'''
+        
+        # Add axes
+        svg += f'''
+        <!-- Axes -->
+        <line x1="{self.margin}" y1="{self.margin}" x2="{self.margin}" y2="{self.height - self.margin}" 
+              stroke="#333" stroke-width="2"/>
+        <line x1="{self.margin}" y1="{self.height - self.margin}" x2="{self.width - self.margin}" y2="{self.height - self.margin}" 
+              stroke="#333" stroke-width="2"/>
+        </svg>'''
+        
+        return svg
     
-    def create_line_plot(self, data: pd.DataFrame, x_col: str, y_col: str) -> str:
-        """Create a line plot."""
-        try:
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
-            # Sort data by x column for proper line plot
-            sorted_data = data.sort_values(x_col)
-            
-            ax.plot(sorted_data[x_col], sorted_data[y_col], marker='o', linewidth=2, markersize=4)
-            ax.set_xlabel(x_col)
-            ax.set_ylabel(y_col)
-            ax.set_title(f'{y_col} vs {x_col}')
-            ax.grid(True, alpha=0.3)
-            
-            return self._fig_to_base64(fig, 'png')
-            
-        except Exception as e:
-            self.logger.error(f"Error creating line plot: {str(e)}")
-            return self._create_error_plot(f"Error creating line plot: {str(e)}")
+    def _create_line_chart(self, data: Dict[str, Any]) -> str:
+        """Create a line chart using SVG."""
+        x_values = data.get('x', [])
+        y_values = data.get('y', [])
+        title = data.get('title', 'Line Chart')
+        
+        if not x_values or not y_values:
+            return self._create_error_chart("No data available for line chart")
+        
+        # Calculate dimensions
+        chart_width = self.width - 2 * self.margin
+        chart_height = self.height - 2 * self.margin
+        
+        # Calculate scales
+        x_min, x_max = min(x_values), max(x_values)
+        y_min, y_max = min(y_values), max(y_values)
+        x_range = x_max - x_min if x_max != x_min else 1
+        y_range = y_max - y_min if y_max != y_min else 1
+        
+        # Start SVG
+        svg = f'''<svg width="{self.width}" height="{self.height}" xmlns="http://www.w3.org/2000/svg">
+        <style>
+            .title {{ font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; text-anchor: middle; }}
+            .axis-label {{ font-family: Arial, sans-serif; font-size: 12px; text-anchor: middle; }}
+            .line {{ stroke: {self.colors[0]}; stroke-width: 2; fill: none; }}
+            .point {{ fill: {self.colors[0]}; }}
+            .grid {{ stroke: #ddd; stroke-width: 0.5; }}
+        </style>
+        
+        <!-- Background -->
+        <rect width="{self.width}" height="{self.height}" fill="white"/>
+        
+        <!-- Title -->
+        <text x="{self.width/2}" y="30" class="title">{title}</text>
+        
+        <!-- Grid lines -->'''
+        
+        # Add grid lines
+        for i in range(6):
+            y = self.margin + (chart_height * i / 5)
+            svg += f'<line x1="{self.margin}" y1="{y}" x2="{self.width - self.margin}" y2="{y}" class="grid"/>'
+        
+        # Create line path
+        points = []
+        for x_val, y_val in zip(x_values, y_values):
+            x = self.margin + ((x_val - x_min) / x_range) * chart_width
+            y = self.height - self.margin - ((y_val - y_min) / y_range) * chart_height
+            points.append(f"{x},{y}")
+        
+        path = "M " + " L ".join(points)
+        svg += f'<path d="{path}" class="line"/>'
+        
+        # Add points
+        for x_val, y_val in zip(x_values, y_values):
+            x = self.margin + ((x_val - x_min) / x_range) * chart_width
+            y = self.height - self.margin - ((y_val - y_min) / y_range) * chart_height
+            svg += f'<circle cx="{x}" cy="{y}" r="4" class="point"/>'
+        
+        # Add axes
+        svg += f'''
+        <!-- Axes -->
+        <line x1="{self.margin}" y1="{self.margin}" x2="{self.margin}" y2="{self.height - self.margin}" 
+              stroke="#333" stroke-width="2"/>
+        <line x1="{self.margin}" y1="{self.height - self.margin}" x2="{self.width - self.margin}" y2="{self.height - self.margin}" 
+              stroke="#333" stroke-width="2"/>
+        </svg>'''
+        
+        return svg
     
-    def create_bar_plot(self, data: pd.DataFrame, x_col: str, y_col: str) -> str:
-        """Create a bar plot."""
-        try:
-            fig, ax = plt.subplots(figsize=(10, 6))
+    def _create_pie_chart(self, data: Dict[str, Any]) -> str:
+        """Create a pie chart using SVG."""
+        labels = data.get('labels', [])
+        values = data.get('values', [])
+        title = data.get('title', 'Pie Chart')
+        
+        if not labels or not values:
+            return self._create_error_chart("No data available for pie chart")
+        
+        # Calculate total and percentages
+        total = sum(values)
+        if total == 0:
+            return self._create_error_chart("Total value is zero")
+        
+        # Chart dimensions
+        center_x = self.width / 2
+        center_y = self.height / 2
+        radius = min(self.width, self.height) / 3
+        
+        # Start SVG
+        svg = f'''<svg width="{self.width}" height="{self.height}" xmlns="http://www.w3.org/2000/svg">
+        <style>
+            .title {{ font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; text-anchor: middle; }}
+            .legend {{ font-family: Arial, sans-serif; font-size: 12px; }}
+            .slice {{ stroke: white; stroke-width: 2; }}
+        </style>
+        
+        <!-- Background -->
+        <rect width="{self.width}" height="{self.height}" fill="white"/>
+        
+        <!-- Title -->
+        <text x="{center_x}" y="30" class="title">{title}</text>'''
+        
+        # Draw pie slices
+        current_angle = 0
+        for i, (label, value) in enumerate(zip(labels, values)):
+            angle = (value / total) * 2 * math.pi
             
-            ax.bar(data[x_col], data[y_col])
-            ax.set_xlabel(x_col)
-            ax.set_ylabel(y_col)
-            ax.set_title(f'{y_col} by {x_col}')
-            ax.grid(True, alpha=0.3)
+            # Calculate arc endpoints
+            x1 = center_x + radius * math.cos(current_angle)
+            y1 = center_y + radius * math.sin(current_angle)
+            x2 = center_x + radius * math.cos(current_angle + angle)
+            y2 = center_y + radius * math.sin(current_angle + angle)
             
-            # Rotate x-axis labels if needed
-            if len(data) > 10:
-                plt.xticks(rotation=45, ha='right')
+            # Large arc flag
+            large_arc = 1 if angle > math.pi else 0
             
-            plt.tight_layout()
+            # Create path
+            path = f"M {center_x} {center_y} L {x1} {y1} A {radius} {radius} 0 {large_arc} 1 {x2} {y2} Z"
             
-            return self._fig_to_base64(fig, 'png')
+            color = self.colors[i % len(self.colors)]
+            svg += f'<path d="{path}" fill="{color}" class="slice"/>'
             
-        except Exception as e:
-            self.logger.error(f"Error creating bar plot: {str(e)}")
-            return self._create_error_plot(f"Error creating bar plot: {str(e)}")
+            # Add legend
+            legend_y = 60 + i * 20
+            svg += f'''
+            <rect x="20" y="{legend_y - 10}" width="15" height="15" fill="{color}"/>
+            <text x="45" y="{legend_y}" class="legend">{label}: {value} ({value/total*100:.1f}%)</text>'''
+            
+            current_angle += angle
+        
+        svg += '</svg>'
+        return svg
     
-    def create_heatmap(self, data: pd.DataFrame, columns: list = None) -> str:
-        """Create a correlation heatmap."""
-        try:
-            # Select numeric columns only
-            numeric_data = data.select_dtypes(include=[np.number])
-            
-            if columns:
-                numeric_data = numeric_data[columns]
-            
-            # Calculate correlation matrix
-            corr_matrix = numeric_data.corr()
-            
-            fig, ax = plt.subplots(figsize=(10, 8))
-            
-            # Create heatmap manually without seaborn
-            im = ax.imshow(corr_matrix, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
-            
-            # Set ticks and labels
-            ax.set_xticks(range(len(corr_matrix.columns)))
-            ax.set_yticks(range(len(corr_matrix.columns)))
-            ax.set_xticklabels(corr_matrix.columns, rotation=45, ha='right')
-            ax.set_yticklabels(corr_matrix.columns)
-            
-            # Add colorbar
-            plt.colorbar(im, ax=ax)
-            
-            # Add text annotations
-            for i in range(len(corr_matrix.columns)):
-                for j in range(len(corr_matrix.columns)):
-                    text = ax.text(j, i, f'{corr_matrix.iloc[i, j]:.2f}',
-                                 ha="center", va="center", color="black" if abs(corr_matrix.iloc[i, j]) < 0.5 else "white")
-            
-            ax.set_title('Correlation Heatmap')
-            plt.tight_layout()
-            
-            return self._fig_to_base64(fig, 'png')
-            
-        except Exception as e:
-            self.logger.error(f"Error creating heatmap: {str(e)}")
-            return self._create_error_plot(f"Error creating heatmap: {str(e)}")
+    def _create_scatter_chart(self, data: Dict[str, Any]) -> str:
+        """Create a scatter plot using SVG."""
+        x_values = data.get('x', [])
+        y_values = data.get('y', [])
+        title = data.get('title', 'Scatter Plot')
+        
+        if not x_values or not y_values:
+            return self._create_error_chart("No data available for scatter plot")
+        
+        # Similar to line chart but with points only
+        return self._create_line_chart(data).replace('class="line"', 'class="line" style="opacity:0"')
     
-    def _fig_to_base64(self, fig, format: str = 'png') -> str:
-        """Convert matplotlib figure to base64 string."""
-        try:
-            buffer = io.BytesIO()
-            fig.savefig(buffer, format=format, dpi=100, bbox_inches='tight')
-            buffer.seek(0)
-            
-            # Convert to base64
-            img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            
-            # Close figure to free memory
-            plt.close(fig)
-            
-            # Return as data URI
-            return f"data:image/{format};base64,{img_base64}"
-            
-        except Exception as e:
-            self.logger.error(f"Error converting figure to base64: {str(e)}")
-            plt.close(fig)
-            raise
+    def _create_error_chart(self, message: str) -> str:
+        """Create an error chart."""
+        svg = f'''<svg width="{self.width}" height="{self.height}" xmlns="http://www.w3.org/2000/svg">
+        <style>
+            .error {{ font-family: Arial, sans-serif; font-size: 16px; text-anchor: middle; fill: #dc2626; }}
+        </style>
+        
+        <rect width="{self.width}" height="{self.height}" fill="white"/>
+        <text x="{self.width/2}" y="{self.height/2}" class="error">{message}</text>
+        </svg>'''
+        
+        svg_bytes = svg.encode('utf-8')
+        return base64.b64encode(svg_bytes).decode('utf-8')
     
-    def _create_error_plot(self, error_message: str) -> str:
-        """Create an error plot with message."""
-        try:
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.text(0.5, 0.5, f"Error: {error_message}", 
-                   horizontalalignment='center', verticalalignment='center',
-                   transform=ax.transAxes, fontsize=12, color='red')
-            ax.set_title("Visualization Error")
-            ax.axis('off')
+    def create_visualization_from_table(self, table_data: List[List[str]], chart_type: str = 'bar') -> str:
+        """
+        Create visualization from table data.
+        
+        Args:
+            table_data: List of rows, first row is headers
+            chart_type: Type of chart to create
             
-            return self._fig_to_base64(fig, 'png')
+        Returns:
+            Base64 encoded SVG chart
+        """
+        try:
+            if len(table_data) < 2:
+                return self._create_error_chart("Insufficient data for visualization")
+            
+            headers = table_data[0]
+            rows = table_data[1:]
+            
+            # Try to find numeric columns
+            numeric_cols = []
+            for i, header in enumerate(headers):
+                try:
+                    # Test if column is numeric
+                    [float(row[i]) for row in rows[:5]]  # Test first 5 rows
+                    numeric_cols.append(i)
+                except (ValueError, IndexError):
+                    continue
+            
+            if not numeric_cols:
+                return self._create_error_chart("No numeric data found for visualization")
+            
+            # Create chart data
+            labels = [row[0] for row in rows]  # First column as labels
+            values = [float(row[numeric_cols[0]]) for row in rows]  # First numeric column
+            
+            chart_data = {
+                'labels': labels,
+                'values': values,
+                'title': f'{headers[numeric_cols[0]]} by {headers[0]}'
+            }
+            
+            return self.create_chart(chart_data, chart_type)
             
         except Exception as e:
-            self.logger.error(f"Error creating error plot: {str(e)}")
-            return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+            return self._create_error_chart(f"Error creating visualization: {str(e)}")
+
+def create_simple_visualization(data: Dict[str, Any], chart_type: str = 'bar') -> str:
+    """
+    Create a simple visualization from data.
     
-    def get_plot_size_kb(self, base64_string: str) -> float:
-        """Get the size of base64 encoded plot in KB."""
-        try:
-            # Remove data URI prefix if present
-            if base64_string.startswith('data:image'):
-                base64_string = base64_string.split(',')[1]
-            
-            # Calculate size in KB
-            size_bytes = len(base64_string.encode('utf-8'))
-            size_kb = size_bytes / 1024
-            
-            return size_kb
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating plot size: {str(e)}")
-            return 0.0
+    Args:
+        data: Data dictionary
+        chart_type: Type of chart
+        
+    Returns:
+        Base64 encoded SVG chart
+    """
+    visualizer = DataVisualizer()
+    return visualizer.create_chart(data, chart_type)
