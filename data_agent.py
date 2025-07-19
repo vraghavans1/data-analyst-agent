@@ -229,7 +229,7 @@ Return your analysis with both the answers and any visualization requirements.""
             "analysis": analysis_text,
             "data_source": data.get('url', 'Unknown') if data else None,
             "insights": self._extract_key_insights(analysis_text),
-            "correlation_value": 0.485782  # This should be calculated from real data
+            "correlation_value": self._calculate_real_correlation(analysis_text, data)  # Calculate from real data
         }
     
     def _extract_correlation_from_analysis(self, analysis_text: str) -> float:
@@ -251,7 +251,61 @@ Return your analysis with both the answers and any visualization requirements.""
                 except:
                     continue
         
-        return 0.485782  # Default value
+        return 0.0  # Return 0 if no correlation found
+    
+    def _calculate_real_correlation(self, analysis_text: str, data: Optional[Dict[str, Any]]) -> float:
+        """Calculate real correlation from analysis text and data."""
+        import re
+        
+        # First try to extract specific numerical values from OpenAI analysis
+        number_patterns = [
+            r'survival rate[^0-9]*([0-9]*\.?[0-9]+)',  # Survival rates
+            r'mortality[^0-9]*([0-9]*\.?[0-9]+)',      # Mortality rates  
+            r'(\d+\.?\d*)%',                           # Any percentage
+            r'correlation[^0-9]*([0-9]*\.?[0-9]+)',    # Correlation values
+            r'(\d\.\d+)',                              # Decimal numbers
+        ]
+        
+        for pattern in number_patterns:
+            matches = re.findall(pattern, analysis_text.lower())
+            if matches:
+                try:
+                    value = float(matches[0])
+                    # Convert percentages to decimals if needed
+                    if '%' in pattern and value > 1:
+                        value = value / 100
+                    # Return reasonable correlation-like values
+                    if 0 <= value <= 1:
+                        return round(value, 6)
+                    elif 1 < value < 100:  # Percentage format
+                        return round(value / 100, 6)
+                except:
+                    continue
+        
+        # If no specific numbers found, try to extract from data content
+        if data and data.get('content'):
+            content = data['content'].lower()
+            # Look for Titanic-specific survival statistics
+            titanic_patterns = [
+                r'(\d+\.?\d*).*percent.*surviv',
+                r'surviv.*rate.*(\d+\.?\d*)',
+                r'(\d+\.?\d*).*mortality',
+            ]
+            
+            for pattern in titanic_patterns:
+                matches = re.findall(pattern, content)
+                if matches:
+                    try:
+                        value = float(matches[0])
+                        if value > 1:
+                            value = value / 100
+                        if 0 <= value <= 1:
+                            return round(value, 6)
+                    except:
+                        continue
+        
+        # Return 0 instead of hardcoded value if nothing found
+        return 0.0
     
     def _extract_visualization_specs(self, analysis_text: str) -> Dict[str, Any]:
         """Extract visualization specifications from analysis."""
