@@ -8,8 +8,8 @@ import os
 import logging
 from typing import Dict, Any, Optional, List
 from query_processor import QueryProcessor
-from web_scraper_lightweight import WebScraper
-from visualization_lightweight import DataVisualizer
+from web_scraper import WebScraper
+from visualization import DataVisualizer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
