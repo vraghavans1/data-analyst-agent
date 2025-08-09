@@ -6,3 +6,17 @@ beautifulsoup4
 python-multipart
 lxml
 matplotlib
+numpy
+pandas
+trafilatura
+beautifulsoup4
+fastapi
+lxml
+matplotlib
+numpy
+openai
+pandas
+python-multipart
+requests
+trafilatura
+uvicorn
