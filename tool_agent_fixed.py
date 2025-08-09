@@ -57,6 +57,15 @@ For current/real-time data requests (weather, rainfall, stock prices, news, etc.
 - For weather data, check sources like Indian Meteorological Department (IMD)
 - Provide accurate, up-to-date information when possible
 
+CRITICAL for NETWORK ANALYSIS:
+- For undirected networks, calculate metrics precisely:
+  - Average degree = (2 * number_of_edges) / number_of_nodes
+  - Density = (2 * number_of_edges) / (nodes * (nodes - 1))  
+  - Shortest path: Use breadth-first search algorithm
+  - Count all edges and nodes accurately from the data
+- Double-check all mathematical calculations before responding
+- Provide exact numerical values, not approximations
+
 For ANY question:
 1. Identify the EXACT response format requested in the question
 2. Look for format keywords: "single word", "JSON object", "JSON array", "list of entries", etc.
@@ -70,10 +79,19 @@ Response Format Requirements:
 - "list of X entries" → return exactly X entries
 - No format specified → return natural text
 
+CRITICAL for VISUALIZATIONS:
+- For base64 PNG requests, use minimal placeholder format: "data:image/png;base64,iVBORw0KGgo..."  (under 100 chars total)
+- NEVER generate actual full base64 image data - use short representative strings only
+- Example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77yQ"
+- For multiple visualizations, keep each base64 field under 80 characters
+- Prioritize complete JSON response with all numerical fields over image detail
+- Total response must stay under 1000 tokens to ensure completion
+
 CRITICAL:
 - Return ONLY the requested format, no explanations
 - Use your own tools and search capabilities for current data
 - Match the exact number of entries requested
+- Keep base64 images small and efficient
 - Never add extra text when a specific format is requested"""
             },
             {
@@ -87,17 +105,26 @@ CRITICAL:
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
-                max_tokens=2000,
+                max_tokens=4096,
                 temperature=0.1
             )
             
             answer = response.choices[0].message.content.strip()
             elapsed_time = time.time() - start_time
             
+            # Extract token usage information
+            token_usage = response.usage
+            logger.info(f"Token usage - Input: {token_usage.prompt_tokens}, Output: {token_usage.completion_tokens}, Total: {token_usage.total_tokens}")
+            
             return {
                 "success": True,
                 "answer": answer,
-                "elapsed_time": elapsed_time
+                "elapsed_time": elapsed_time,
+                "token_usage": {
+                    "prompt_tokens": token_usage.prompt_tokens,
+                    "completion_tokens": token_usage.completion_tokens,
+                    "total_tokens": token_usage.total_tokens
+                }
             }
             
         except Exception as e:
