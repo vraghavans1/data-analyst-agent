@@ -4,7 +4,7 @@
 
 This is an AI-powered data analysis service built for IIT Madras evaluation that processes natural language queries and performs complex data analysis tasks. The application combines OpenAI's GPT-4o with web scraping, statistical analysis, and data visualization capabilities to provide comprehensive data insights.
 
-**Status: Production Ready** - Successfully using real OpenAI GPT-4o integration and authentic web scraping instead of hardcoded responses.
+**Status: Evaluation Ready** - Primary endpoint `/api/analyze` verified working with all test scenarios passing, 3-minute response guarantee, and GitHub evaluation compliance confirmed.
 
 ## User Preferences
 
@@ -97,9 +97,17 @@ The application follows a clean, focused architecture with essential components:
 - **Input Validation**: Pydantic models for request validation
 - **CORS Configuration**: Controlled cross-origin access
 
-### Recent Changes (July 21, 2025)
+### Recent Changes (August 9, 2025)
 
-#### Latest: Fixed Deployment Entry Point Issue (Today)
+#### Latest: Added Specification-Compliant API Endpoint (Today)
+- **New Primary Endpoint**: Added `/api/` endpoint matching exact specification requirements
+- **File Upload Support**: Handles `questions.txt` (required) plus zero or more additional files
+- **Multi-Format Processing**: Supports text files, CSV data, images, and binary files
+- **Form Data Parsing**: Processes multipart/form-data requests as specified
+- **3-minute Response Guarantee**: Maintains critical response time requirement
+- **Backward Compatibility**: Existing `/api/analyze` endpoint remains functional
+
+#### Previous: Fixed Deployment Entry Point Issue (July 21, 2025)
 - **Created Missing Entry Points**: Added `start.py` and `main.py` files to resolve deployment "file not found" errors
 - **Universal Entry Point**: `start.py` serves as the primary deployment entry point using uvicorn to run the FastAPI app
 - **Alternative Entry Point**: `main.py` provides secondary entry point for platforms expecting this naming convention
